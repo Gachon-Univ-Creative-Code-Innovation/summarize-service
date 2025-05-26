@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
@@ -23,7 +24,18 @@ class CommonResponse(BaseModel):
     message: str
     data: str
 
-@app.post("/summarize", response_model=CommonResponse)
+@app.get("/api/blog/summarize/health-check")
+async def health_check():
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": 200,
+            "message": "서버 상태 확인",
+            "data": "Working"
+        }
+    )
+
+@app.post("/api/blog/summarize", response_model=CommonResponse)
 async def summarizeText(request: SummarizeRequest):
     try:
         # messages 포맷

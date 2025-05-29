@@ -1,9 +1,8 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
-import requests
+import httpx
 
 # .env 파일 불러오기
 load_dotenv()
@@ -24,7 +23,8 @@ class CommonResponse(BaseModel):
     message: str
     data: str
 
-@app.get("/api/blog/summarize/health-check")
+
+@app.get("/api/summarize-service/health-check")
 async def health_check():
     return JSONResponse(
         status_code=200,
@@ -35,48 +35,47 @@ async def health_check():
         }
     )
 
-@app.post("/api/blog/summarize", response_model=CommonResponse)
+@app.post("/api/summarize-service/summarize", response_model=CommonResponse)
 async def summarizeText(request: SummarizeRequest):
     try:
         # messages 포맷
         messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a summarizing expert. Summarize the following text in Korean.\n"
-                "Important: Output must be only the Korean summary text itself. No explanation, no label, no preamble, no English text.\n"
-                "Conditions:\n"
-                "1. The summary must be complete and end with a full sentence.\n"
-                "2. Keep it within 500 characters.\n"
-                "3. Avoid repeated words or redundant expressions.\n"
-                "4. Only include the key information.\n"
-                "Example:\n"
-                "Input: \"이것은 샘플 텍스트입니다.\"\n"
-                "Output: \"샘플 요약입니다.\"\n"
-                "Now summarize this text:\n"
-            )
-        },
-        {
-            "role": "user",
-            "content": request.context
-        }
+            {
+                "role": "system",
+                "content": (
+                    "You are a summarizing expert. Summarize the following text in Korean.\n"
+                    "Important: Output must be only the Korean summary text itself. No explanation, no label, no preamble, no English text.\n"
+                    "Conditions:\n"
+                    "1. The summary must be complete and end with a full sentence.\n"
+                    "2. Keep it within 500 characters.\n"
+                    "3. Avoid repeated words or redundant expressions.\n"
+                    "4. Only include the key information.\n"
+                    "Example:\n"
+                    "Input: \"이것은 샘플 텍스트입니다.\"\n"
+                    "Output: \"샘플 요약입니다.\"\n"
+                    "Now summarize this text:\n"
+                )
+            },
+            {
+                "role": "user",
+                "content": request.context
+            }
         ]
 
         payload = {
             "model": "google/gemma-3-4b-it",
             "messages": messages,
-            "temperature": 0.2
+            "temperature": 0.3
         }
 
-        # JSON 자동 인코딩 및 Content-Type 헤더 자동 설정
-        response = requests.post(VLLM_SERVER_URL, json=payload)
+        # ✅ 비동기 HTTP 요청으로 변경
+        async with httpx.AsyncClient() as client:
+            response = await client.post(VLLM_SERVER_URL, json=payload)
 
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail=f"vLLM 서버 오류: {response.text}")
 
         result = response.json()
-
-        # 응답 구조에서 content 가져오기 (KeyError 방지용 get() 사용)
         summaryText = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
         if not summaryText:
@@ -90,6 +89,8 @@ async def summarizeText(request: SummarizeRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 #cd Desktop/vLLM

@@ -1,3 +1,4 @@
+from fastapi.responses import JSONResponse
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -73,13 +74,21 @@ async def summarizeText(request: SummarizeRequest):
             response = await client.post(VLLM_SERVER_URL, json=payload)
 
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"vLLM 서버 오류: {response.text}")
+            return CommonResponse(
+                status=500,
+                message=f"vLLM 서버 오류: {response.text}",
+                data=""
+            )
 
         result = response.json()
         summaryText = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
         if not summaryText:
-            raise HTTPException(status_code=500, detail="vLLM 응답에서 content를 찾을 수 없습니다.")
+            return CommonResponse(
+                status=500,
+                message="vLLM 응답에서 content를 찾을 수 없습니다.",
+                data=""
+            )
 
         return CommonResponse(
             status=200,
@@ -88,8 +97,21 @@ async def summarizeText(request: SummarizeRequest):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return CommonResponse(                    # ← ③
+            status=500,
+            message=str(e),
+            data=""
+        )
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],   # FE 주소(여러 개면 리스트로 추가로 넣어주도록 하자.)
+    allow_credentials=True,
+    allow_methods=["POST", "GET", "OPTIONS"],  # 또는 ["*"], get은 필요해서 추가함.
+    allow_headers=["*"],                       # Authorization 포함
+)
 
 
 

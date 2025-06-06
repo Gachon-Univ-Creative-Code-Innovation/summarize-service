@@ -5,10 +5,22 @@ from dotenv import load_dotenv
 import os
 import httpx
 
+from fastapi.middleware.cors import CORSMiddleware
+
+
 # .env 파일 불러오기
 load_dotenv()
 
 app = FastAPI()
+
+# CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],                       # 모든 도메인 허용
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],                       # Authorization 포함
+)
 
 # 환경변수에서 vLLM 서버 URL 불러오기
 VLLM_SERVER_URL = os.getenv("VLLM_SERVER_URL")
@@ -97,21 +109,11 @@ async def summarizeText(request: SummarizeRequest):
         )
 
     except Exception as e:
-        return CommonResponse(                    # ← ③
+        return CommonResponse(
             status=500,
             message=str(e),
             data=""
         )
-
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],   # FE 주소(여러 개면 리스트로 추가로 넣어주도록 하자.)
-    allow_credentials=True,
-    allow_methods=["POST", "GET", "OPTIONS"],  # 또는 ["*"], get은 필요해서 추가함.
-    allow_headers=["*"],                       # Authorization 포함
-)
 
 
 

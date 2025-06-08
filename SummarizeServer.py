@@ -4,8 +4,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
 import httpx
-
-from fastapi.middleware.cors import CORSMiddleware
+from bs4 import BeautifulSoup
 
 
 # .env 파일 불러오기
@@ -13,14 +12,6 @@ load_dotenv()
 
 app = FastAPI()
 
-# CORS 설정
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],                       # 모든 도메인 허용
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],                       # Authorization 포함
-)
 
 # 환경변수에서 vLLM 서버 URL 불러오기
 VLLM_SERVER_URL = os.getenv("VLLM_SERVER_URL")
@@ -36,6 +27,10 @@ class CommonResponse(BaseModel):
     message: str
     data: str
 
+def strip_html_tags(text):
+    soup = BeautifulSoup(text, "html.parser")
+    clean_text = soup.get_text(separator="\n")
+    return clean_text.strip()
 
 @app.get("/api/summarize-service/health-check")
 async def health_check():
@@ -71,7 +66,7 @@ async def summarizeText(request: SummarizeRequest):
             },
             {
                 "role": "user",
-                "content": request.context
+                "content": strip_html_tags(request.context)
             }
         ]
 

@@ -5,13 +5,16 @@ from dotenv import load_dotenv
 import os
 import httpx
 from bs4 import BeautifulSoup
+from prometheus_fastapi_instrumentator import Instrumentator
+import asyncio
+import logging
 
 
 # .env 파일 불러오기
 load_dotenv()
 
 app = FastAPI()
-
+instrumentator = Instrumentator().instrument(app).expose(app)
 
 # 환경변수에서 vLLM 서버 URL 불러오기
 VLLM_SERVER_URL = os.getenv("VLLM_SERVER_URL")
@@ -109,6 +112,64 @@ async def summarizeText(request: SummarizeRequest):
             message=str(e),
             data=""
         )
+
+
+# 로거 설정 (optional)
+logger = logging.getLogger("uvicorn.error")
+
+# Dummy 요청용 메시지
+dummy_messages = [
+    {
+        "role": "system",
+        "content": (
+            "You are a summarizing expert. Summarize the following text in Korean.\n"
+            "Important: Output must be only the Korean summary text itself. No explanation, no label, no preamble, no English text.\n"
+            "Conditions:\n"
+            "1. The summary must be complete and end with a full sentence.\n"
+            "2. Keep it within 500 characters.\n"
+            "3. Avoid repeated words or redundant expressions.\n"
+            "4. Only include the key information.\n"
+            "Example:\n"
+            "Input: \"이것은 샘플 텍스트입니다.\"\n"
+            "Output: \"샘플 요약입니다.\"\n"
+            "Now summarize this text:\n"
+        )
+    },
+    {
+        "role": "user",
+        "content": "이것은 더미 요청용 텍스트입니다. 서버가 정상 동작하는지 확인합니다."
+    }
+]
+
+async def dummy_warmup_task():
+    while True:
+        try:
+            logger.info("[Warmup] Dummy 요청 전송 시작")
+            payload = {
+                "model": "google/gemma-3-4b-it",
+                "messages": dummy_messages,
+                "temperature": 0.3
+            }
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(VLLM_SERVER_URL, json=payload)
+            
+            if response.status_code == 200:
+                logger.info("[Warmup] Dummy 요청 성공 ✅")
+            else:
+                logger.warning(f"[Warmup] Dummy 요청 실패 ❌ - 상태코드: {response.status_code}, 응답: {response.text}")
+
+        except Exception as e:
+            logger.error(f"[Warmup] Dummy 요청 중 예외 발생 ❗ - {str(e)}")
+
+        # 5분(300초)마다 실행 → 필요시 600초(10분)로 변경 가능
+        await asyncio.sleep(300)
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("서버 시작 시 warmup task 실행")
+    asyncio.create_task(dummy_warmup_task())
+
 
 
 
